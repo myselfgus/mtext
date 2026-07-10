@@ -41,7 +41,10 @@ export function HomePage() {
   const setError = useTranscriptionStore((s) => s.setError);
   const reset = useTranscriptionStore((s) => s.reset);
   const [inputUrl, setInputUrl] = useState('');
-  const isIdle = ['idle', 'complete', 'error'].includes(status);
+  const isIdle = status === 'idle';
+  const isError = status === 'error';
+  const isComplete = status === 'complete';
+  const isProcessing = ['submitting', 'transcribing', 'saving'].includes(status);
   const handleTranscribe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputUrl.trim() || !inputUrl.startsWith('http')) {
@@ -52,7 +55,6 @@ export function HomePage() {
     setUrl(inputUrl);
     setStatus('submitting');
     try {
-      // Small delay for UI feedback on submission
       await new Promise(resolve => setTimeout(resolve, 800));
       setStatus('transcribing');
       const response = await api<TranscriptionResult>('/api/transcribe', {
@@ -70,9 +72,13 @@ export function HomePage() {
       toast.error('Falha na transcrição');
     }
   };
+  const handleNewAnalysis = () => {
+    setInputUrl('');
+    reset();
+  };
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copiado');
+    toast.success('Copiado para a área de transferência');
   };
   const downloadFile = (content: string, filename: string, type: string) => {
     const blob = new Blob([content], { type });
@@ -96,7 +102,6 @@ export function HomePage() {
     <AppLayout>
       <div className="space-y-12">
         <ThemeToggle className="fixed top-6 right-6" />
-        {/* Branding Hero */}
         <header className="text-center space-y-4 max-w-3xl mx-auto pt-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -122,7 +127,6 @@ export function HomePage() {
             Transcrição clínica automatizada para telemedicina e consultórios.
           </motion.p>
         </header>
-        {/* Action Form */}
         <section className="max-w-3xl mx-auto">
           <Card className="border shadow-soft overflow-hidden p-1 bg-card/50 backdrop-blur-sm transition-all hover:shadow-glow">
             <CardContent className="p-0">
@@ -132,19 +136,19 @@ export function HomePage() {
                   className="h-14 border-none bg-transparent focus-visible:ring-0 text-base"
                   value={inputUrl}
                   onChange={(e) => setInputUrl(e.target.value)}
-                  disabled={!isIdle}
+                  disabled={!isIdle && !isError && !isComplete}
                 />
                 <Button
                   type="submit"
                   size="lg"
                   className="bg-sky-600 hover:bg-sky-700 text-white h-14 px-10 transition-all font-semibold rounded-lg"
-                  disabled={!isIdle}
+                  disabled={isProcessing}
                 >
-                  {!isIdle ? (
+                  {isProcessing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      <Send className="w-4 h-4 mr-2" /> Analisar
+                      <Send className="w-4 h-4 mr-2" /> {isComplete ? 'Refazer' : 'Analisar'}
                     </>
                   )}
                 </Button>
@@ -152,9 +156,8 @@ export function HomePage() {
             </CardContent>
           </Card>
         </section>
-        {/* Live Stepper */}
         <AnimatePresence mode="wait">
-          {!isIdle && status !== 'error' && (
+          {(isProcessing || isComplete) && !isError && (
             <motion.section
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -187,11 +190,11 @@ export function HomePage() {
                         isActive ? "bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300" :
                         "bg-secondary text-muted-foreground"
                       )}>
-                        {isActive && !isPast ? <Loader2 className="w-5 h-5 animate-spin" /> : <Icon className="w-5 h-5" />}
+                        {isActive && !isPast ? <Loader2 className="w-5 h-5 animate-spin" /> : (isPast ? <CheckCircle2 className="w-5 h-5" /> : <Icon className="w-5 h-5" />)}
                       </div>
                       <span className={cn(
                         "text-[9px] font-bold uppercase tracking-widest text-center",
-                        isActive ? "text-sky-600 dark:text-sky-400" : "text-muted-foreground"
+                        isActive ? "text-sky-600 dark:text-sky-400" : (isPast ? "text-green-600 dark:text-green-400" : "text-muted-foreground")
                       )}>
                         {step.label}
                       </span>
@@ -202,8 +205,7 @@ export function HomePage() {
             </motion.section>
           )}
         </AnimatePresence>
-        {/* Error State */}
-        {status === 'error' && (
+        {isError && (
           <section className="max-w-3xl mx-auto">
             <div className="p-6 rounded-2xl bg-destructive/5 border border-destructive/20 flex items-center gap-5 text-destructive">
               <div className="p-3 bg-destructive/10 rounded-full">
@@ -213,15 +215,14 @@ export function HomePage() {
                 <p className="text-sm font-bold uppercase tracking-tight">Falha no Processamento</p>
                 <p className="text-xs opacity-80">{error || 'O servidor de transcrição não pôde completar a requisição.'}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => { setInputUrl(''); reset(); }} className="border-destructive/20 text-destructive hover:bg-destructive/10">
+              <Button variant="outline" size="sm" onClick={handleNewAnalysis} className="border-destructive/20 text-destructive hover:bg-destructive/10">
                 Reiniciar
               </Button>
             </div>
           </section>
         )}
-        {/* Complete Results Display */}
         <AnimatePresence>
-          {status === 'complete' && result && (
+          {isComplete && result && (
             <motion.section
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -233,21 +234,20 @@ export function HomePage() {
                   <p className="text-sm text-muted-foreground">Transcrição gerada com diarização e timestamps Scribe v2.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                   <Button variant="outline" size="sm" onClick={() => { setInputUrl(''); reset(); }} className="rounded-full h-10 px-6 shadow-sm border-sky-200 text-sky-600 hover:bg-sky-50">
+                   <Button variant="outline" size="sm" onClick={handleNewAnalysis} className="rounded-full h-10 px-6 shadow-sm border-sky-200 text-sky-600 hover:bg-sky-50">
                     <RefreshCcw className="w-4 h-4 mr-2" /> Nova Análise
                   </Button>
                 </div>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Main Content Area */}
                 <Card className="lg:col-span-2 border shadow-soft flex flex-col bg-card/40 backdrop-blur-sm">
                   <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20 px-6 py-4">
                     <CardTitle className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Corpo da Transcrição</CardTitle>
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-sky-100" onClick={() => copyToClipboard(result.text)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-sky-100" title="Copiar texto" onClick={() => copyToClipboard(result.text)}>
                         <Copy className="w-4 h-4 text-sky-600" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-sky-100" onClick={() => downloadFile(result.text, 'mtext_transcript.txt', 'text/plain')}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-sky-100" title="Baixar TXT" onClick={() => downloadFile(result.text, 'mtext_transcript.txt', 'text/plain')}>
                         <Download className="w-4 h-4 text-sky-600" />
                       </Button>
                     </div>
@@ -258,7 +258,6 @@ export function HomePage() {
                     </div>
                   </CardContent>
                 </Card>
-                {/* Meta-information Sidebar */}
                 <div className="space-y-6">
                   <Card className="border-none shadow-soft bg-sky-600 text-white overflow-hidden relative">
                     <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -279,7 +278,7 @@ export function HomePage() {
                         </div>
                       </div>
                       <div className="p-4 bg-black/10 rounded-2xl text-[10px] leading-relaxed italic border border-white/5 opacity-80">
-                        Certificado de conformidade clínica processado em {new Date(result.timestamp).toLocaleDateString('pt-BR')} às {new Date(result.timestamp).toLocaleTimeString('pt-BR')}.
+                        Processado em {new Date(result.timestamp).toLocaleDateString('pt-BR')} às {new Date(result.timestamp).toLocaleTimeString('pt-BR')}.
                       </div>
                     </CardContent>
                   </Card>
