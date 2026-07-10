@@ -1,6 +1,6 @@
 # Cloudflare Workers React Template
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/myselfgus/mtext)
 
 A production-ready full-stack template featuring a React frontend with shadcn/ui components, powered by Cloudflare Workers, Hono, and Durable Objects for persistent state management. Includes built-in support for entities like users and chats with transactional indexes.
 
@@ -76,7 +76,7 @@ Deploy to Cloudflare Workers with a single command:
 bun run deploy
 ```
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/myselfgus/mtext)
 
 After deployment, the Worker handles both the React frontend and API routes automatically via `wrangler.jsonc` asset configuration.
 
