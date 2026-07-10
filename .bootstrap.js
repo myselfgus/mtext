@@ -85,7 +85,13 @@ function updateWranglerJsonc() {
 }
 
 function runSetupCommands() {
-    const commandArgvs = [];
+    const commandArgvs = [
+    [
+        "bun",
+        "add",
+        "@elevenlabs/elevenlabs-js"
+    ]
+];
     const ALLOWED = new Set(['npm', 'yarn', 'pnpm', 'bun']);
     
     if (commandArgvs.length === 0) {
