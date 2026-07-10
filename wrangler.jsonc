@@ -5,7 +5,7 @@
  {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "medscribe-clinical-hrqxnx1_3mmjivkqlahk9",
-	"main": "worker/index.ts",
+    "name": "mtext",
 	"compatibility_date": "2025-04-24",
 	"assets": {
 		"not_found_handling": "single-page-application",
