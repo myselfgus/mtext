@@ -21,10 +21,5 @@ export const useTranscriptionStore = create<TranscriptionState>((set) => ({
   setUrl: (url) => set({ url }),
   setResult: (result) => set({ result }),
   setError: (error) => set({ error }),
-  reset: () => set({ 
-    status: 'idle', 
-    url: '', 
-    result: null, 
-    error: null 
-  }),
+  reset: () => set({ status: 'idle', url: '', result: null, error: null }),
 }));
