@@ -130,7 +130,7 @@ async function saveOutputs(
     : `external/${job.id}/transcricao`;
 
   const meta = { source: job.audioKey ?? job.source, stt_job: job.id };
-  const puts: { key: string; body: string; type: string; label: string }[] = [
+  const puts: { key: string; body: string | Uint8Array; type: string; label: string }[] = [
     {
       key: `${outDirBase}.transcript.json`,
       body: JSON.stringify(data, null, 2),
@@ -144,13 +144,20 @@ async function saveOutputs(
     is_base64_encoded?: boolean;
   }[];
   for (const f of additional) {
-    const content = f.is_base64_encoded ? atob(f.content) : f.content;
+    // Base64 → bytes crus (atob sozinho corromperia acentos UTF-8 ao salvar)
+    let body: string | Uint8Array = f.content;
+    if (f.is_base64_encoded) {
+      const bin = atob(f.content);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      body = bytes;
+    }
     if (f.requested_format === 'txt') {
-      puts.push({ key: `${outDirBase}.txt`, body: content, type: 'text/plain; charset=utf-8', label: 'Texto puro' });
+      puts.push({ key: `${outDirBase}.txt`, body, type: 'text/plain; charset=utf-8', label: 'Texto puro' });
     } else if (f.requested_format === 'segmented_json') {
       puts.push({
         key: `${outDirBase}.segmented.json`,
-        body: content,
+        body,
         type: 'application/json',
         label: 'Segmentos por falante',
       });
@@ -275,7 +282,12 @@ async function validWebhookSignature(env: Env, req: Request, body: string): Prom
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${parts.t}.${body}`));
   const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
-  return hex === parts.v0.replace(/^v0=/, '');
+  // Comparação em tempo constante (evita timing attack)
+  const expected = parts.v0;
+  if (hex.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
 }
 
 export default {
@@ -294,14 +306,20 @@ export default {
     if (path === '/api/webhook/elevenlabs' && request.method === 'POST') {
       const body = await request.text();
       if (!(await validWebhookSignature(env, request, body))) return err('assinatura inválida', 401);
-      const payload = JSON.parse(body) as { type?: string; data?: Record<string, unknown> };
+      let payload: { type?: string; data?: Record<string, unknown> };
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        return err('payload JSON inválido', 400);
+      }
       const data = (payload.data ?? payload) as Record<string, unknown>;
       const requestId = (data.request_id as string) || (data.transcription_id as string) || '';
       if (!requestId) return err('payload sem request_id/transcription_id', 400);
       const pendingObj = await env.INBOX.get(`${PENDING_PREFIX}${requestId}.json`);
       if (!pendingObj) return json({ ok: true, note: 'nenhum job pendente para este request' });
       const pending = (await pendingObj.json()) as { jobId: string };
-      const job = (await loadJob(env, pending.jobId))!;
+      const job = await loadJob(env, pending.jobId);
+      if (!job) return err('job não encontrado para este request', 404);
       const transcription = (data.transcription ?? data) as Record<string, unknown>;
       const emit = async (step: string, detail?: string) => {
         job.steps.push({ t: Date.now(), step, detail });
