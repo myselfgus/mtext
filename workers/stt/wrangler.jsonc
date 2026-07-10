@@ -1,0 +1,39 @@
+/**
+ * inbox-audio-stt — Worker de transcrição (ElevenLabs Scribe v2) para consultas médicas.
+ *
+ * Fluxo: recebe URL/key de áudio → lê o áudio do bucket R2 `inbox-audio`
+ * (ou baixa de URL pública) → envia para a ElevenLabs → salva a transcrição
+ * (.txt, .segmented.json, .transcript.json) no MESMO diretório do áudio.
+ *
+ * Deploy: npx wrangler deploy -c workers/stt/wrangler.jsonc
+ */
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "inbox-audio-stt",
+  "main": "index.ts",
+  "compatibility_date": "2025-04-24",
+  "observability": { "enabled": true },
+  "r2_buckets": [
+    {
+      "binding": "INBOX",
+      "bucket_name": "inbox-audio"
+    }
+  ],
+  "services": [
+    {
+      // RPC privado do worker inbox-audio-api (catálogo D1 + anotações)
+      "binding": "INBOX_API",
+      "service": "inbox-audio-api",
+      "entrypoint": "InboxRPC"
+    }
+  ],
+  "vars": {
+    // Chave hardcoded a pedido do usuário. Para produção, prefira:
+    //   npx wrangler secret put ELEVENLABS_API_KEY -c workers/stt/wrangler.jsonc
+    // (o secret tem precedência sobre esta var)
+    "ELEVENLABS_API_KEY": "sk_c72c19d4e3ba431d529905bc657ae0d7970b03905df1fe85",
+    // Chave de acesso simples do frontend/API deste worker (o bucket contém PHI)
+    "STT_APP_KEY": "mtext-stt-2026"
+    // Opcional (modo assíncrono): "ELEVENLABS_WEBHOOK_SECRET": "whsec_..."
+  }
+}
