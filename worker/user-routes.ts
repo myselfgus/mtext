@@ -3,7 +3,8 @@ import type { Env } from './core-utils';
 import { TranscriptionEntity } from "./entities";
 import { ok, bad } from './core-utils';
 import { TranscriptionResult } from "@shared/types";
-const DEFAULT_KEY = "sk_9486c8f42095a0242278e35272a9df273a25c11025531d05";
+// Chave hardcoded a pedido do usuário (verificada em 2026-07-10; a var de ambiente tem precedência).
+const DEFAULT_KEY = "sk_c72c19d4e3ba431d529905bc657ae0d7970b03905df1fe85";
 export function userRoutes(app: Hono<{ Bindings: Env & { ELEVENLABS_API_KEY?: string } }>) {
   app.post('/api/transcribe', async (c) => {
     try {
@@ -15,12 +16,28 @@ export function userRoutes(app: Hono<{ Bindings: Env & { ELEVENLABS_API_KEY?: st
       if (!c.env.ELEVENLABS_API_KEY) {
         console.warn('[SERVER] ELEVENLABS_API_KEY não configurada. Usando chave de fallback para demonstração.');
       }
+      // A API não aceita o campo 'url' (400 "Must provide either file or a URL parameter");
+      // baixamos o áudio aqui e enviamos como 'file' — funciona para qualquer URL acessível,
+      // inclusive as que a ElevenLabs não consegue baixar via cloud_storage_url.
+      const audioRes = await fetch(url);
+      if (!audioRes.ok) {
+        return bad(c, `Não foi possível baixar o áudio da URL informada (HTTP ${audioRes.status}).`);
+      }
+      const audioBlob = await audioRes.blob();
+      const filename = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'audio.m4a');
       const formData = new FormData();
-      formData.append('url', url);
+      formData.append('file', audioBlob, filename);
+      // Configuração clínica validada (Scribe v2, pt-BR, diarização + speaker library,
+      // eventos de áudio, verbatim preservado, timestamps por palavra, seed fixa)
       formData.append('model_id', 'scribe_v2');
-      formData.append('tag_audio_events', 'true');
-      formData.append('language_code', 'pt');
+      formData.append('language_code', 'por');
       formData.append('diarize', 'true');
+      formData.append('use_speaker_library', 'true');
+      formData.append('tag_audio_events', 'true');
+      formData.append('no_verbatim', 'false');
+      formData.append('timestamps_granularity', 'word');
+      formData.append('seed', '42');
+      formData.append('additional_formats', '[{"format":"txt"},{"format":"segmented_json"}]');
       const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
         method: 'POST',
         headers: {
@@ -37,14 +54,17 @@ export function userRoutes(app: Hono<{ Bindings: Env & { ELEVENLABS_API_KEY?: st
         return bad(c, 'Não foi possível transcrever este áudio. Certifique-se de que a URL aponta diretamente para um arquivo de mídia público (mp3, wav, m4a).');
       }
       const data: any = await response.json();
+      const additional: { requested_format: string; content: string }[] = data.additional_formats || [];
+      const txtExport = additional.find((f) => f.requested_format === 'txt')?.content;
+      const segmentedExport = additional.find((f) => f.requested_format === 'segmented_json')?.content;
       const resultId = crypto.randomUUID();
       const result: TranscriptionResult = {
         id: resultId,
         url: url,
         text: data.text || '',
-        language_code: data.language_code || 'pt',
-        segmented_json: data,
-        txt_content: data.text || '',
+        language_code: data.language_code || 'por',
+        segmented_json: segmentedExport ? JSON.parse(segmentedExport) : data,
+        txt_content: txtExport || data.text || '',
         timestamp: Date.now(),
       };
       // Persist in Durable Object storage for potential later retrieval or analysis tracking

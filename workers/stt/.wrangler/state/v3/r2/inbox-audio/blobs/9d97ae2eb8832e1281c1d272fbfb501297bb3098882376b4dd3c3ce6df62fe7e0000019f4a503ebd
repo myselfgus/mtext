@@ -1,0 +1,17 @@
+{
+  "id": "1783658200073-ee95ec14",
+  "source": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Example.ogg",
+  "audioKey": null,
+  "status": "error",
+  "steps": [
+    {
+      "t": 1783658200571,
+      "step": "resolve",
+      "detail": "URL externa → https://upload.wikimedia.org/wikipedia/commons/c/c8/Example.ogg"
+    }
+  ],
+  "outputs": [],
+  "createdAt": 1783658200073,
+  "error": "Falha ao baixar o áudio (HTTP 403)",
+  "finishedAt": 1783658200764
+}

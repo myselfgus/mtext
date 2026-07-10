@@ -1,0 +1,17 @@
+{
+  "id": "1783658242262-704d9742",
+  "source": "Paciente Teste/C1 - 100726/100726 Paciente Teste.ogg",
+  "audioKey": "Paciente Teste/C1 - 100726/100726 Paciente Teste.ogg",
+  "status": "error",
+  "steps": [
+    {
+      "t": 1783658242275,
+      "step": "resolve",
+      "detail": "bucket inbox-audio → Paciente Teste/C1 - 100726/100726 Paciente Teste.ogg"
+    }
+  ],
+  "outputs": [],
+  "createdAt": 1783658242262,
+  "error": "Áudio não encontrado no bucket: Paciente Teste/C1 - 100726/100726 Paciente Teste.ogg",
+  "finishedAt": 1783658242281
+}
