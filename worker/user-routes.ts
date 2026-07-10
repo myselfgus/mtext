@@ -54,9 +54,19 @@ export function userRoutes(app: Hono<{ Bindings: Env & { ELEVENLABS_API_KEY?: st
         return bad(c, 'Não foi possível transcrever este áudio. Certifique-se de que a URL aponta diretamente para um arquivo de mídia público (mp3, wav, m4a).');
       }
       const data: any = await response.json();
-      const additional: { requested_format: string; content: string }[] = data.additional_formats || [];
-      const txtExport = additional.find((f) => f.requested_format === 'txt')?.content;
-      const segmentedExport = additional.find((f) => f.requested_format === 'segmented_json')?.content;
+      const additional: { requested_format: string; content: string; is_base64_encoded?: boolean }[] = data.additional_formats || [];
+      // Exports podem vir em base64; decodificar como UTF-8 para não corromper acentos
+      const decodeContent = (f: { content: string; is_base64_encoded?: boolean }) => {
+        if (!f.is_base64_encoded) return f.content;
+        const bin = atob(f.content);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder().decode(bytes);
+      };
+      const txtObj = additional.find((f) => f.requested_format === 'txt');
+      const txtExport = txtObj ? decodeContent(txtObj) : undefined;
+      const segmentedObj = additional.find((f) => f.requested_format === 'segmented_json');
+      const segmentedExport = segmentedObj ? decodeContent(segmentedObj) : undefined;
       const resultId = crypto.randomUUID();
       const result: TranscriptionResult = {
         id: resultId,
