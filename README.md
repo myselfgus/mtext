@@ -1,85 +1,64 @@
-# Cloudflare Workers React Template
+# mtext · stt
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/myselfgus/mtext)
+> ⚠️ **DEPLOY CONGELADO — NUNCA rode `wrangler deploy` neste repo.**
+> O worker `stt` em produção está **à frente** deste source (e do GitHub):
+> mudanças foram feitas direto em produção e não existem aqui. Um redeploy
+> a partir deste código faria **downgrade silencioso** da transcrição
+> clínica. Este repositório serve apenas como referência histórica e
+> documentação. Correções vão em outros órgãos (hdrive/cleantxt) ou num
+> worker novo — nunca aqui.
 
-A production-ready full-stack template featuring a React frontend with shadcn/ui components, powered by Cloudflare Workers, Hono, and Durable Objects for persistent state management. Includes built-in support for entities like users and chats with transactional indexes.
+Órgão de **transcrição** do CloudHealthSphere (CHS/healthOS · VOITHER):
+converte os áudios clínicos do bucket `inbox-audio` em texto via
+**ElevenLabs Scribe** com diarização. Sistema completo: README do
+[`agents-start`](https://github.com/myselfgus/agents-start) (hub).
 
-## Description
+## Posição no organismo
 
-This template provides a complete development environment for building scalable web applications on Cloudflare's edge network. It combines a modern React + TypeScript frontend with a robust backend leveraging Durable Objects for stateful logic, all deployable in seconds.
-
-## Key Features
-
-- Responsive React UI with Tailwind CSS and shadcn/ui components
-- Full-stack TypeScript with shared types between client and worker
-- Durable Objects for entity management (Users, ChatBoards) with automatic seeding and indexing
-- RESTful API using Hono with CORS, logging, and error handling
-- Theme toggle with system preference detection
-- Client-side error reporting and comprehensive boundaries
-- Optimistic updates and React Query for data fetching
-- Ready-to-use chat and user demo with message persistence
-
-## Technology Stack
-
-- **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui, TanStack React Query, React Router
-- **Backend**: Cloudflare Workers, Hono, Durable Objects
-- **Tooling**: Bun, ESLint, PostCSS, Wrangler
-- **UI/UX**: Lucide icons, Sonner toasts, Immer for state
-
-## Prerequisites
-
-- Bun (v1.0+)
-- Cloudflare account (for deployment)
-
-## Installation
-
-Clone the repository and install dependencies using Bun:
-
-```bash
-bun install
+```mermaid
+flowchart LR
+    AS[agents-start<br/>superfície] -- ".fetch() service binding<br/>(sem RPC — drift)" --> MT[mtext / stt]
+    MT --- R2[("R2 inbox-audio<br/>binding direto")]
+    MT -- "RPC addAnnotation<br/>(entrypoint InboxRPC)" --> HD[hdrive]
+    MT --> EL[ElevenLabs Scribe]
+    R2 -- ".txt novo → queue" --> CT[cleantxt<br/>normalização]
 ```
 
-## Development
+## Fluxo de transcrição (worker em produção)
 
-Start the local development server:
+```mermaid
+sequenceDiagram
+    participant C as Caller (agents-start / UI)
+    participant MT as stt worker
+    participant R2 as R2 inbox-audio
+    participant EL as ElevenLabs
+    participant HD as hdrive (InboxRPC)
 
-```bash
-bun dev
+    C->>MT: POST /api/transcribe {key | url}
+    MT->>R2: lê o áudio (get)
+    MT->>EL: speech-to-text (Scribe, diarização,<br/>additional_formats: txt/segmented/srt)
+    EL-->>MT: transcript completo
+    MT->>R2: grava no MESMO diretório do áudio:<br/>base.txt · base.segmented.json · base.transcript.json
+    MT->>HD: addAnnotation(kind=transcription)
+    MT-->>C: JSON com keys gravadas
+    Note over R2: o base.txt novo dispara o cleantxt<br/>(R2 event notification → queue)
 ```
 
-The application runs at `http://localhost:3000` (or the port specified by `$PORT`).
+- **Layout do bucket é contrato**: `Paciente/Cx - DDMMAA/arquivo` — os
+  outputs vão sempre ao lado do áudio de origem. Todo o resto do sistema
+  (hdrive, cleantxt, explorer do agents-start) depende disso.
+- `transcript.json` guarda o retorno bruto do ElevenLabs
+  (`additional_formats` incluído) — foi ele que permitiu restaurar arquivos
+  corrompidos num incidente do pipeline; **nunca apagar**.
+- O frontend React deste template não é usado em produção; a interface real
+  é o agents-start/hdrive.
 
-Build for production:
-
-```bash
-bun run build
-```
-
-## Usage
-
-The app includes a live demo homepage with interactive elements. API endpoints are available under `/api`:
-
-- `GET /api/users` - List users
-- `POST /api/users` - Create user
-- `GET /api/chats` - List chats
-- `POST /api/chats` - Create chat
-- `GET /api/chats/:chatId/messages` - List messages
-- `POST /api/chats/:chatId/messages` - Send message
-
-Extend functionality by modifying `worker/user-routes.ts` for new endpoints or `worker/entities.ts` for additional Durable Object entities.
-
-## Deployment
-
-Deploy to Cloudflare Workers with a single command:
+## Operação
 
 ```bash
-bun run deploy
+npx wrangler tail stt     # observar — o ÚNICO comando seguro
+# npx wrangler deploy     # ❌ PROIBIDO (ver aviso no topo)
 ```
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/myselfgus/mtext)
-
-After deployment, the Worker handles both the React frontend and API routes automatically via `wrangler.jsonc` asset configuration.
-
-## License
-
-MIT License. See LICENSE for details.
+Evoluções de transcrição devem nascer fora deste worker (novo órgão ou
+extensão do hdrive), consumindo o mesmo bucket e o mesmo InboxRPC.
